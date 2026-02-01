@@ -1,0 +1,2 @@
+context/authContext.tsx(75,57): error TS2367: This comparison appears to be unintentional because the types '"sign-in" | "sign-up" | "_sitemap" | "home"' and '"index"' have no overlap.
+firebaseConfig.ts(3,10): error TS2305: Module '"firebase/auth"' has no exported member 'getReactNativePersistence'.

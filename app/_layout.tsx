@@ -1,24 +1,62 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { Stack, useRouter, useSegments } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import React, { useEffect } from "react";
+import { Platform, StyleSheet } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "../context/authContext";
+import "../global.css";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+if (Platform.OS === "web") {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
-export const unstable_settings = {
-  anchor: '(tabs)',
+import { colors } from "../constants/theme";
+
+// ... existing imports
+
+const MainLayout = () => {
+  const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    // const inAuthGroup = segments[0] === "(group)"; // adjust based on folder structure
+    // Actually, let's use the logic from before
+    const firstSegment = segments[0] as string | undefined;
+    const inAuthRoute = !firstSegment || firstSegment === "sign-in" || firstSegment === "sign-up" || firstSegment === "welcome";
+
+    if (!user && !inAuthRoute) {
+      // Redirect to welcome if accessing protected route without user
+      router.replace("/welcome");
+    } else if (user && inAuthRoute && firstSegment !== undefined) {
+      // Redirect to home if user is logged in and trying to access auth screens
+      router.replace("/(tabs)/home");
+    }
+  }, [user, isLoading, segments]);
+
+  return (
+    <Stack screenOptions={{
+      headerShown: false,
+      contentStyle: { backgroundColor: colors.neutral900 }
+    }} />
+  );
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaProvider style={styles.container}>
+      <AuthProvider>
+        <MainLayout />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.neutral900,
+  },
+});

@@ -130,7 +130,11 @@ export default function WalletScreen() {
                             const [iconName, iconColor] = isIconWithColor ? wallet.icon!.split(':') : ['wallet', colors.primary];
 
                             return (
-                                <TouchableOpacity key={wallet.id} style={styles.walletItem}>
+                                <TouchableOpacity
+                                    key={wallet.id}
+                                    style={styles.walletItem}
+                                    onPress={() => router.push({ pathname: "/wallet-detail", params: { id: wallet.id } })}
+                                >
                                     <View style={[styles.walletIcon, { backgroundColor: iconColor || colors.primary }]}>
                                         {wallet.icon?.startsWith('data:') ? (
                                             <Image source={{ uri: wallet.icon }} style={styles.walletIconImage} />

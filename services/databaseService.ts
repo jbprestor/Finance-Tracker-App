@@ -292,3 +292,43 @@ export const getUserWallets = async (uid: string): Promise<WalletData[]> => {
         throw error;
     }
 };
+
+/**
+ * Updates an existing wallet.
+ */
+export const updateWallet = async (uid: string, walletId: string, updates: Partial<Omit<WalletData, 'id'>>) => {
+    try {
+        const userRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+            const wallets: WalletData[] = userDoc.data()?.wallets || [];
+            const updatedWallets = wallets.map(w =>
+                w.id === walletId ? { ...w, ...updates } : w
+            );
+            await updateDoc(userRef, { wallets: updatedWallets });
+            console.log("Wallet updated!");
+        }
+    } catch (error) {
+        console.error("Error updating wallet:", error);
+        throw error;
+    }
+};
+
+/**
+ * Deletes a wallet by ID.
+ */
+export const deleteWallet = async (uid: string, walletId: string) => {
+    try {
+        const userRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+            const wallets: WalletData[] = userDoc.data()?.wallets || [];
+            const filteredWallets = wallets.filter(w => w.id !== walletId);
+            await updateDoc(userRef, { wallets: filteredWallets });
+            console.log("Wallet deleted!");
+        }
+    } catch (error) {
+        console.error("Error deleting wallet:", error);
+        throw error;
+    }
+};

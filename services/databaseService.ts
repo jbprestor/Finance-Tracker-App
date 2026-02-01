@@ -18,6 +18,16 @@ export interface TransactionData {
     note: string;
     date: Date; // Allow Date object from UI
     type: 'income' | 'expense';
+    walletId?: string;
+    receiptImage?: string;
+}
+
+export interface WalletData {
+    id: string;
+    name: string;
+    icon?: string;
+    balance: number;
+    createdAt?: Date;
 }
 
 export interface UserData {
@@ -26,6 +36,7 @@ export interface UserData {
     totalBalance: number;
     totalIncome: number;
     totalExpenses: number;
+    wallets?: WalletData[];
 }
 
 /**
@@ -218,6 +229,66 @@ export const getUpcomingBills = async (uid: string) => {
         return bills;
     } catch (error) {
         console.error("Error fetching bills:", error);
+        throw error;
+    }
+};
+
+/**
+ * Updates user profile data in Firestore.
+ */
+import { updateDoc } from "firebase/firestore";
+
+export const updateUserProfile = async (uid: string, data: { name?: string, phone?: string, photoURL?: string }) => {
+    try {
+        const userRef = doc(db, "users", uid);
+        await updateDoc(userRef, {
+            ...data,
+            updatedAt: Timestamp.now(),
+        });
+        console.log("User profile updated!");
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        throw error;
+    }
+};
+
+/**
+ * Adds a new wallet to user's wallet list.
+ */
+import { arrayUnion, getDoc } from "firebase/firestore";
+
+export const addWallet = async (uid: string, wallet: Omit<WalletData, 'id' | 'createdAt'>) => {
+    try {
+        const userRef = doc(db, "users", uid);
+        const walletData: WalletData = {
+            ...wallet,
+            id: `wallet_${Date.now()}`,
+            createdAt: new Date(),
+        };
+        await updateDoc(userRef, {
+            wallets: arrayUnion(walletData),
+        });
+        console.log("Wallet added!");
+        return walletData;
+    } catch (error) {
+        console.error("Error adding wallet:", error);
+        throw error;
+    }
+};
+
+/**
+ * Gets user's wallets from Firestore.
+ */
+export const getUserWallets = async (uid: string): Promise<WalletData[]> => {
+    try {
+        const userRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+            return userDoc.data()?.wallets || [];
+        }
+        return [];
+    } catch (error) {
+        console.error("Error fetching wallets:", error);
         throw error;
     }
 };

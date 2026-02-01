@@ -1,15 +1,38 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { doc, getDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import Typo from "../../components/Typo";
 import { colors } from "../../constants/theme";
 import { useAuth } from "../../context/authContext";
+import { db } from "../../firebaseConfig";
 import { verticalScale } from "../../utils/styling";
 
 export default function ProfileScreen() {
     const { user, signOut } = useAuth();
     const router = useRouter();
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+
+    // Fetch user's profile photo from Firestore
+    useEffect(() => {
+        const fetchUserProfile = async () => {
+            if (!user?.uid) return;
+            try {
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    if (data?.photoURL) {
+                        setProfilePhoto(data.photoURL);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching profile:", error);
+            }
+        };
+        fetchUserProfile();
+    }, [user?.uid]);
 
     const handleLogout = async () => {
         await signOut();
@@ -44,7 +67,7 @@ export default function ProfileScreen() {
             <View style={styles.avatarContainer}>
                 <View style={styles.avatarWrapper}>
                     <Image
-                        source={require("../../assets/images/welcome.png")}
+                        source={profilePhoto ? { uri: profilePhoto } : require("../../assets/images/welcome.png")}
                         style={styles.avatar}
                     />
                 </View>
@@ -61,20 +84,27 @@ export default function ProfileScreen() {
                 {menuItems.map((item, index) => {
                     const isFirst = index === 0;
                     return (
-                        <TouchableOpacity key={index} style={styles.menuItem} activeOpacity={0.7}>
+                        <TouchableOpacity
+                            key={index}
+                            style={styles.menuItem}
+                            activeOpacity={0.7}
+                            onPress={() => item.route && router.push(item.route as any)}
+                        >
                             <View style={[
                                 styles.iconContainer,
-                                isFirst && styles.inviteIconContainer // Specific style for Invite Friends
+                                isFirst && styles.inviteIconContainer
                             ]}>
                                 <Ionicons
                                     name={item.icon as any}
                                     size={24}
-                                    color={isFirst ? "#059669" : colors.neutral400} // Green icon for first item
+                                    color={isFirst ? "#059669" : colors.neutral400}
                                 />
                             </View>
                             <Typo size={16} color={colors.textLight} fontWeight="500" style={{ flex: 1, marginLeft: 15 }}>
                                 {item.label}
                             </Typo>
+                            {/* Chevron for indication */}
+                            <Ionicons name="chevron-forward" size={20} color={colors.neutral600} />
                         </TouchableOpacity>
                     );
                 })}

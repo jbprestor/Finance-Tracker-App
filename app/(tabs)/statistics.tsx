@@ -14,10 +14,14 @@ type Period = "Day" | "Week" | "Month" | "Year";
 export default function StatisticsScreen() {
     const router = useRouter();
     const { user } = useAuth();
-    const [selectedPeriod, setSelectedPeriod] = useState<Period>("Day");
+
+    // State
+    const [selectedPeriod, setSelectedPeriod] = useState<Period>("Week");
     const [transactions, setTransactions] = useState<(TransactionData & { id: string })[]>([]);
     const [loading, setLoading] = useState(false);
     const [totalExpense, setTotalExpense] = useState(0);
+    const [chartData, setChartData] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+    const [chartLabels, setChartLabels] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
 
     const periods: Period[] = ["Day", "Week", "Month", "Year"];
 
@@ -27,30 +31,85 @@ export default function StatisticsScreen() {
         fetchData(selectedPeriod);
     }, [selectedPeriod, user]);
 
+    // Aggregate data for chart whenever transactions change
+    useEffect(() => {
+        const expenses = transactions.filter(t => t.type === 'expense');
+        let data: number[] = [];
+        let labels: string[] = [];
+
+        if (selectedPeriod === "Day") {
+            // 4-hour blocks: 0-4, 4-8, 8-12, 12-16, 16-20, 20-24
+            data = [0, 0, 0, 0, 0, 0];
+            labels = ["4h", "8h", "12h", "16h", "20h", "24h"];
+
+            expenses.forEach(t => {
+                const hour = new Date(t.date).getHours();
+                const index = Math.floor(hour / 4);
+                if (index < 6) data[index] += Number(t.amount);
+            });
+
+        } else if (selectedPeriod === "Week") {
+            data = [0, 0, 0, 0, 0, 0, 0];
+            labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+            expenses.forEach(t => {
+                const date = new Date(t.date);
+                // Convert Sun(0)..Sat(6) to Mon(0)..Sun(6)
+                const dayIndex = (date.getDay() + 6) % 7;
+                data[dayIndex] += Number(t.amount);
+            });
+
+        } else if (selectedPeriod === "Month") {
+            // 5 Weeks max
+            data = [0, 0, 0, 0, 0];
+            labels = ["W1", "W2", "W3", "W4", "W5"];
+
+            expenses.forEach(t => {
+                const date = new Date(t.date);
+                const day = date.getDate();
+                // Simple bucket: 1-7, 8-14, 15-21, 22-28, 29+
+                const index = Math.min(Math.floor((day - 1) / 7), 4);
+                data[index] += Number(t.amount);
+            });
+
+        } else if (selectedPeriod === "Year") {
+            data = new Array(12).fill(0);
+            labels = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+
+            expenses.forEach(t => {
+                const month = new Date(t.date).getMonth(); // 0-11
+                data[month] += Number(t.amount);
+            });
+        }
+
+        // Normalize
+        const maxVal = Math.max(...data, 1);
+        const normalizedData = data.map(v => (v / maxVal) * 100);
+
+        setChartData(normalizedData);
+        setChartLabels(labels);
+    }, [transactions, selectedPeriod]);
+
     const fetchData = async (period: Period) => {
         setLoading(true);
         try {
             const now = new Date();
             let startDate = new Date();
             let endDate = new Date();
+            // Start of today by default for Day
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
 
-            // Set simple start/end dates based on period
-            // Note: This logic can be refined for precise "Start of Week", etc.
             if (period === "Day") {
-                startDate.setHours(0, 0, 0, 0); // Start of today
-                endDate.setHours(23, 59, 59, 999); // End of today
+                // Default is correct
             } else if (period === "Week") {
-                // Last 7 days
-                startDate.setDate(now.getDate() - 6);
-                startDate.setHours(0, 0, 0, 0);
+                const day = now.getDay();
+                const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+                startDate.setDate(diff);
             } else if (period === "Month") {
-                // First day of current month
                 startDate.setDate(1);
-                startDate.setHours(0, 0, 0, 0);
             } else if (period === "Year") {
-                // First day of current year
                 startDate.setMonth(0, 1);
-                startDate.setHours(0, 0, 0, 0);
             }
 
             if (user) {
@@ -73,16 +132,6 @@ export default function StatisticsScreen() {
         .filter(t => t.type === 'expense')
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5); // Top 5
-
-    // Prepare Chart Data (Simple aggregation for MVP)
-    // For MVP simplification: We will just map the last 7 transactions or expenses to bars if period is Date?
-    // Actually, let's do a simple aggregation:
-    // If Week: Aggregate by Day (Mon, Tue...)
-    // If Day: Show hourly? Or just show "Today" as one bar? Let's just mock the chart visual for now with REAL total.
-    // Ideally requires buckets. Let's stick to the visual provided but use dummy data for chart HEIGHTS, 
-    // but keep REAL TOTAL text. Real chart logic is complex for 5 mins.
-    const chartData = [40, 60, 50, 75, 90, 65, 55]; // Placeholder visualization
-    const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('en-PH', {
@@ -109,6 +158,26 @@ export default function StatisticsScreen() {
         };
         return map[category] || 'pricetag'; // Default
     };
+
+    // Calculate active bar index
+    const getActiveIndex = () => {
+        const now = new Date();
+        if (selectedPeriod === "Day") {
+            return Math.floor(now.getHours() / 4);
+        }
+        if (selectedPeriod === "Week") {
+            return (now.getDay() + 6) % 7;
+        }
+        if (selectedPeriod === "Month") {
+            return Math.min(Math.floor((now.getDate() - 1) / 7), 4);
+        }
+        if (selectedPeriod === "Year") {
+            return now.getMonth();
+        }
+        return -1;
+    };
+
+    const activeIndex = getActiveIndex();
 
     return (
         <ScreenWrapper style={{ backgroundColor: colors.neutral900 }}>
@@ -165,12 +234,16 @@ export default function StatisticsScreen() {
                         </Typo>
                     </View>
 
-                    {/* Bar Chart Visualization (Static for MVP) */}
+                    {/* Bar Chart Visualization */}
                     <View style={styles.chartArea}>
                         {chartData.map((height, index) => (
-                            <View key={index} style={styles.barWrapper}>
-                                <View style={[styles.bar, { height: `${height}%` }, index === 4 && styles.activeBar]} />
-                                <Typo size={10} color={colors.neutral500} style={{ marginTop: 8 }}>{labels[index]}</Typo>
+                            <View key={index} style={[styles.barWrapper, { width: `${100 / chartData.length}%` }]}>
+                                <View style={[
+                                    styles.bar,
+                                    { height: `${Math.max(height, 5)}%` },
+                                    index === activeIndex && styles.activeBar
+                                ]} />
+                                <Typo size={10} color={colors.neutral500} style={{ marginTop: 8 }}>{chartLabels[index]}</Typo>
                             </View>
                         ))}
                     </View>
@@ -288,7 +361,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         height: "100%",
         justifyContent: "flex-end",
-        width: 30,
+        // width handled dynamically
     },
     bar: {
         width: 6,

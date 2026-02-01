@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase/app";
 // @ts-ignore: getReactNativePersistence is not exported in firebase@9 type definitions
 import { Auth, browserLocalPersistence, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 
 // Import the functions you need from the SDKs you need
@@ -38,6 +39,7 @@ if (Platform.OS === "web") {
 // Removed duplicate initializeApp.
 
 const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { auth, db };
+export { auth, db, storage };
 

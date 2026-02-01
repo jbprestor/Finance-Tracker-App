@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import Typo from "../../components/Typo";
@@ -9,7 +9,7 @@ import { TransactionList } from "../../components/finance/TransactionList";
 import WalletActions from "../../components/wallet/WalletActions";
 import { colors, spacingY, verticalScale } from "../../constants/theme";
 import { useAuth } from "../../context/authContext";
-import { BillData, getRecentTransactions, getUpcomingBills, subscribeToUserData, TransactionData, UserData } from "../../services/databaseService";
+import { BillData, getRecentTransactions, getUpcomingBills, getUserWallets, subscribeToUserData, TransactionData, UserData, WalletData } from "../../services/databaseService";
 
 export default function WalletScreen() {
     const router = useRouter();
@@ -20,6 +20,7 @@ export default function WalletScreen() {
     const [userData, setUserData] = useState<UserData | null>(null);
     const [transactions, setTransactions] = useState<(TransactionData & { id: string })[]>([]);
     const [bills, setBills] = useState<(BillData & { id: string })[]>([]);
+    const [wallets, setWallets] = useState<WalletData[]>([]);
     const [activeTab, setActiveTab] = useState<"Transactions" | "Upcoming Bills">("Transactions");
     const [loading, setLoading] = useState(true);
 
@@ -52,12 +53,24 @@ export default function WalletScreen() {
         fetchData();
     }, [user, activeTab]);
 
+    // 3. Fetch Wallets (Refresh when screen comes into focus)
+    useFocusEffect(
+        useCallback(() => {
+            if (!user) return;
+            const fetchWallets = async () => {
+                try {
+                    const userWallets = await getUserWallets(user.uid);
+                    setWallets(userWallets);
+                } catch (error) {
+                    console.error("Failed to fetch wallets", error);
+                }
+            };
+            fetchWallets();
+        }, [user])
+    );
+
     const handleAddPress = () => {
-        if (activeTab === "Transactions") {
-            router.push("/connect-wallet");
-        } else {
-            router.push("/add-bill");
-        }
+        router.push("/add-account");
     };
 
     const formatCurrency = (amount: number) => {
@@ -98,7 +111,43 @@ export default function WalletScreen() {
                     <WalletActions onAddPress={handleAddPress} />
                 </View>
 
-                {/* Tabs */}
+                {/* My Wallets Section */}
+                <View style={styles.walletsSection}>
+                    <View style={styles.sectionHeader}>
+                        <Typo size={16} fontWeight="600" color="white">My Wallets</Typo>
+                        <TouchableOpacity onPress={() => router.push("/add-wallet")}>
+                            <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+                    {wallets.length === 0 ? (
+                        <TouchableOpacity style={styles.emptyWalletCard} onPress={() => router.push("/add-wallet")}>
+                            <Ionicons name="wallet-outline" size={32} color={colors.neutral500} />
+                            <Typo size={14} color={colors.neutral400} style={{ marginTop: 8 }}>Add your first wallet</Typo>
+                        </TouchableOpacity>
+                    ) : (
+                        wallets.map((wallet) => {
+                            const isIconWithColor = wallet.icon?.includes(':');
+                            const [iconName, iconColor] = isIconWithColor ? wallet.icon!.split(':') : ['wallet', colors.primary];
+
+                            return (
+                                <TouchableOpacity key={wallet.id} style={styles.walletItem}>
+                                    <View style={[styles.walletIcon, { backgroundColor: iconColor || colors.primary }]}>
+                                        {wallet.icon?.startsWith('data:') ? (
+                                            <Image source={{ uri: wallet.icon }} style={styles.walletIconImage} />
+                                        ) : (
+                                            <Ionicons name={(iconName || 'wallet') as any} size={20} color="white" />
+                                        )}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Typo size={16} fontWeight="600" color="white">{wallet.name}</Typo>
+                                        <Typo size={12} color={colors.neutral400}>{formatCurrency(wallet.balance)}</Typo>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color={colors.neutral500} />
+                                </TouchableOpacity>
+                            );
+                        })
+                    )}
+                </View>
                 <View style={styles.tabsContainer}>
                     <TouchableOpacity
                         style={[styles.tab, activeTab === "Transactions" && styles.activeTab]}
@@ -251,5 +300,46 @@ const styles = StyleSheet.create({
     },
     activeTab: {
         backgroundColor: colors.white,
+    },
+    walletsSection: {
+        marginBottom: spacingY._20,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    emptyWalletCard: {
+        backgroundColor: colors.neutral800,
+        borderRadius: 16,
+        padding: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: colors.neutral700,
+        borderStyle: 'dashed',
+    },
+    walletItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.neutral800,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 10,
+        gap: 12,
+    },
+    walletIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    walletIconImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
 });
